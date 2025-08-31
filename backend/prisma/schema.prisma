@@ -13,3 +13,62 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  role      UserRole @default(ADMIN)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignedSeats Seat[] @relation("SeatAssignedTo")
+  lockedSeats   Seat[] @relation("SeatLockedBy")
+}
+
+model FloorPlan {
+  id        String     @id @default(cuid())
+  name      String
+  version   Int        @default(1)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  seats     Seat[]
+  versions  FloorPlanVersion[]
+}
+
+model Seat {
+  id           String     @id @default(cuid())
+  floorPlanId  String
+  status       SeatStatus @default(AVAILABLE)
+
+  // Relations
+  floorPlan    FloorPlan  @relation(fields: [floorPlanId], references: [id])
+
+  assignedTo   User?      @relation("SeatAssignedTo", fields: [assignedToId], references: [id])
+  assignedToId String?
+
+  lockedBy     User?      @relation("SeatLockedBy", fields: [lockedById], references: [id])
+  lockedById   String?
+}
+
+model FloorPlanVersion {
+  id          String    @id @default(cuid())
+  floorPlanId String
+  changes     Json
+  createdAt   DateTime  @default(now())
+
+  floorPlan   FloorPlan @relation(fields: [floorPlanId], references: [id])
+}
+
+enum SeatStatus {
+  AVAILABLE
+  ON_HOLD
+  ASSIGNED
+}
+
+enum UserRole {
+  ADMIN
+  SUPER_ADMIN
+}
