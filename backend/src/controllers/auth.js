@@ -68,9 +68,6 @@ const loginUser = async (req, res) => {
 
     const AccessToken = await GenerateToken(user?._id);
     const FetchedUser = await User.findById(user._id).select("-password -refreshToken");
-    res.set("Authorization", `Bearer ${AccessToken}`);
-    // Also set the header in lowercase to be safe
-    res.set("authorization", `Bearer ${AccessToken}`);
     res
       .status(200)
       .cookie("accessToken", AccessToken, options)
