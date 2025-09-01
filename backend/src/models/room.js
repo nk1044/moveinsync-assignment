@@ -5,7 +5,12 @@ const roomSchema = new mongoose.Schema(
     roomNumber: { type: String, required: true, unique: true },
     floor: { type: Number, required: true },
     availableSeats: { type: Number, required: true, min: 1 },
-    status :{}
+
+    isHold: {
+      type: String,
+      enum: [ "true", "false"],
+      default: "free", 
+    },
   },
   { timestamps: true }
 );

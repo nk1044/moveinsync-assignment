@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { LoginUser, RegisterUser } from '../server/server';
 
 export default function AuthForm() {
   const [isLogin, setIsLogin] = useState(true);
@@ -17,39 +18,23 @@ export default function AuthForm() {
   };
 
   const handleLogin = async () => {
-    // TODO: Implement login logic here
     console.log('Login attempt:', { email: formData.email, password: formData.password });
-    
-    // Example API call placeholder:
-    // try {
-    //   const response = await fetch('/api/login', {
-    //     method: 'POST',
-    //     headers: { 'Content-Type': 'application/json' },
-    //     body: JSON.stringify({ email: formData.email, password: formData.password })
-    //   });
-    //   const result = await response.json();
-    //   // Handle success/error
-    // } catch (error) {
-    //   console.error('Login error:', error);
-    // }
+    try {
+      const response = await LoginUser({ email: formData.email, password: formData.password });
+      
+    } catch (error) {
+      console.error('Login error:', error);
+    }
   };
 
   const handleRegister = async () => {
-    // TODO: Implement register logic here
     console.log('Register attempt:', formData);
-    
-    // Example API call placeholder:
-    // try {
-    //   const response = await fetch('/api/register', {
-    //     method: 'POST',
-    //     headers: { 'Content-Type': 'application/json' },
-    //     body: JSON.stringify(formData)
-    //   });
-    //   const result = await response.json();
-    //   // Handle success/error
-    // } catch (error) {
-    //   console.error('Register error:', error);
-    // }
+    try {
+      const response = await RegisterUser({ name: formData.name, email: formData.email, password: formData.password });
+      
+    } catch (error) {
+      console.error('Register error:', error);
+    }
   };
 
   const handleSubmit = isLogin ? handleLogin : handleRegister;

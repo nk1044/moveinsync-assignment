@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';
-import { connectDB } from './config/db';
+import { connectDB } from './config/db.js';
 
 
 const app = express();
@@ -18,11 +18,15 @@ app.get('/', (req, res) => {
     res.send('Unauthorized route');
 });
 
+import authRouter from './routes/auth.route.js';
+import roomRouter from './routes/room.route.js';
+app.use('/api/users', authRouter);
+app.use('/api/rooms', roomRouter);
+
 
 connectDB()
     .then(async () => {
-
-        app.listen(port, '0.0.0.0', () => {
+        app.listen(port, () => {
             console.log(`Server is listening on port ${port}`);
         });
     })
