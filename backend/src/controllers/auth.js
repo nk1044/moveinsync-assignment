@@ -1,28 +1,40 @@
 import { User } from '../models/user.js';
 
-const options = {
-  secure: process.env.NODE_ENV === "production",
-  sameSite: process.env.NODE_ENV === "production" ? "None" : "Lax",
+const isProduction = process.env.NODE_ENV === "production";
+
+const options={
+  httpOnly: true,
+  secure: isProduction,
+  sameSite: isProduction ? "None" : "Lax",
 };
-
-
  
 const GenerateToken = async (userId) => {
+  console.log("userId in GenerateToken:", userId);
+  
   const user = await User.findById(userId);
+  console.log("Fetched user:", user._id);
+  if (!user) {
+    throw new Error("User not found");
+  }
+
   const AccessToken = await user.GenerateAccessToken();
   const RefreshToken = await user.GenerateRefreshToken();
 
+  console.log("generated Access and Refresh tokens");
   user.refreshToken = RefreshToken;
   await user.save({ validateBeforeSave: false });
 
   return AccessToken;
-}
+};
+
 
 
 
 // Register user
 const registerUser = async (req, res) => {
-  const { name, email, password, role } = req.body;
+  console.log("a request came to register user");
+  
+  const { name, email, password } = req.body;
 
   if([name, email, password].some(field => field.trim()==='')) return res.status(400).json({ message: 'All fields are required' });
 
@@ -35,7 +47,6 @@ const registerUser = async (req, res) => {
       name: name, 
       email: email, 
       password: password, 
-      role: role ?? 'user' 
     });
     await newUser.save();
 
@@ -54,7 +65,7 @@ const registerUser = async (req, res) => {
 
 // Login user
 const loginUser = async (req, res) => {
-
+  console.log("a request came to login user");
   const { email, password } = req.body;
   if([email, password].some(field => field.trim()==='')) return res.status(400).json({ message: 'All fields are required' });
 
@@ -67,49 +78,19 @@ const loginUser = async (req, res) => {
     if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
 
     const AccessToken = await GenerateToken(user?._id);
+    console.log('AccessToken in loginUser: ', AccessToken);
     const FetchedUser = await User.findById(user._id).select("-password -refreshToken");
+    console.log('FetchedUser in loginUser: ', FetchedUser._id);
     res
       .status(200)
       .cookie("accessToken", AccessToken, options)
-      .json({ message: "User logged in successfully", user: FetchedUser,cookie:AccessToken});
+      .json({ message: "User logged in successfully", user: FetchedUser});
 
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err });
   }
 };
 
-// Google authentication
-const googleAuth = async (req, res) => {
-  // console.log(req.body);
-  const { token } = req.body;
-
-  try {
-    const googleUser = await verifyGoogleToken(token);
-    let user = await User.findOne({ email: googleUser.email });
-
-    if (!user) {
-      user = await User.create({
-        name: googleUser.given_name,
-        email: googleUser.email,
-        password: googleUser.sub,
-        avatar: googleUser.picture,
-        role: "user",
-      });
-      await newUser.save({ validateBeforeSave: false });
-    }
-
-    const AccessToken = await GenerateToken(user?._id);
-    const FetchedUser = await User.findById(user._id).select("-password -refreshToken");
-    
-    res
-      .status(200)
-      .cookie("accessToken", AccessToken, options)
-      .json({ message: "User created successfully", user: FetchedUser,cookie:AccessToken });
-
-  } catch (err) {
-    res.status(400).json({ message: 'Google authentication failed', error: err });
-  }
-};
 
 // Logout user
 const LogOut = async (req, res) => {
@@ -140,7 +121,6 @@ const getCurrentUser = async(req, res)=> {
 
 
 export {
-  googleAuth,
   loginUser,
   registerUser,
   LogOut,

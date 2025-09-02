@@ -1,8 +1,13 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { LoginUser, RegisterUser } from '../server/server';
+import { useUser } from '../store/zustand';
+import { useNavigate } from 'react-router-dom';
+import {toast } from 'react-hot-toast';
 
 export default function AuthForm() {
   const [isLogin, setIsLogin] = useState(true);
+  const navigate = useNavigate();
+  const setUser = useUser(useCallback(state => state.setUser, []));
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -21,8 +26,15 @@ export default function AuthForm() {
     console.log('Login attempt:', { email: formData.email, password: formData.password });
     try {
       const response = await LoginUser({ email: formData.email, password: formData.password });
-      
+      // store the user data into zustand userStore and navigate to '/
+      console.log('Login response:', response);
+      if(response && response.user) {
+        toast.success("Login successful!");
+        await setUser(response.user);
+        navigate('/');
+      }
     } catch (error) {
+      toast.error("Authentication failed. Please check your credentials and try again.");
       console.error('Login error:', error);
     }
   };
@@ -31,8 +43,13 @@ export default function AuthForm() {
     console.log('Register attempt:', formData);
     try {
       const response = await RegisterUser({ name: formData.name, email: formData.email, password: formData.password });
-      
+      if(response && response.user) {
+        toast.success("Successfully registered!");
+        await setUser(response.user);
+        navigate('/');
+      }
     } catch (error) {
+      toast.error("Registration failed. Please try again.");
       console.error('Register error:', error);
     }
   };

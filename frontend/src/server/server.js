@@ -10,8 +10,7 @@ const LoginUser = async (data) => {
       { withCredentials: true }
     );
     console.log(response.data);
-    
-    return handleAuthResponse(response);
+    return response.data;
   } catch (err) {
     console.log('LoginUser failed', err);
     return { status: 400, error: err?.response?.data?.message };
@@ -25,8 +24,7 @@ const RegisterUser = async (data) => {
       { ...data }, 
       { withCredentials: true }
     );
-    
-    return handleAuthResponse(response);
+    return response.data;
   } catch (err) {
     console.log('RegisterUser failed', err);
     throw err;
