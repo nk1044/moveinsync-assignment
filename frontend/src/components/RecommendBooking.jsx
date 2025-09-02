@@ -1,30 +1,57 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import {toast} from "react-hot-toast";
 import { useUser } from "../store/zustand";
+import {recommendRooms, assignRoom} from '../server/room';
 
-export default function RecommendBooking({ onAssigned, api }) {
+
+export default function RecommendBooking({ onAssigned }) {
   const { user } = useUser();
   const [num, setNum] = useState(2);
   const [floor, setFloor] = useState("");
   const [candidates, setCandidates] = useState([]);
   const [fromTime, setFromTime] = useState("");
   const [toTime, setToTime] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const getRecommendations = async () => {
+    if (num < 1) {
+      toast.error("Number of people must be at least 1");
+      return;
+    }
+
+    setLoading(true);
     try {
-      const res = await api.recommendRooms({
+      const res = await recommendRooms({
         numberOfPeople: num,
         preferredFloor: floor || undefined,
       });
       setCandidates(res);
+      if (res.length === 0) {
+        toast.info("No rooms found matching your criteria");
+      } else {
+        toast.success(`Found ${res.length} available room${res.length > 1 ? 's' : ''}`);
+      }
     } catch (err) {
       console.error(err);
-      alert("Failed to fetch recommendations");
+      toast.error("Failed to fetch recommendations");
+    } finally {
+      setLoading(false);
     }
   };
 
   const book = async (candidate) => {
     if (!user?._id) {
-      alert("You must be logged in to book a room");
+      toast.error("You must be logged in to book a room");
+      return;
+    }
+
+    if (!fromTime || !toTime) {
+      toast.error("Please select both start and end times");
+      return;
+    }
+
+    if (new Date(fromTime) >= new Date(toTime)) {
+      toast.error("End time must be after start time");
       return;
     }
 
@@ -32,62 +59,121 @@ export default function RecommendBooking({ onAssigned, api }) {
       fromTime: fromTime || new Date().toISOString(),
       toTime: toTime || new Date(Date.now() + 60 * 60 * 1000).toISOString(),
       numberOfPeople: num,
-      organizer: user._id, // ✅ use store user id
+      organizer: user._id,
       preferredFloor: floor || undefined,
     };
 
     try {
-      await api.assignRoom(payload);
-      alert("Booked!");
+      await assignRoom(payload);
+      toast.success(`Room ${candidate.roomNumber} booked successfully!`);
       setCandidates([]);
+      setFromTime("");
+      setToTime("");
       if (onAssigned) onAssigned();
     } catch (err) {
       console.error(err);
-      alert("Failed to book room");
+      toast.error(err.response?.data?.message || "Failed to book room");
     }
   };
 
   return (
-    <div>
-      <h4>Recommend & Book</h4>
-      <div>
-        <input
-          type="number"
-          value={num}
-          onChange={(e) => setNum(e.target.value)}
-        />{" "}
-        people
-        <input
-          placeholder="preferred floor"
-          value={floor}
-          onChange={(e) => setFloor(e.target.value)}
-          style={{ marginLeft: 8 }}
-        />
-        <button onClick={getRecommendations}>Get Suggestions</button>
-      </div>
-      <div style={{ marginTop: 8 }}>
-        <label>From</label>{" "}
-        <input
-          type="datetime-local"
-          value={fromTime}
-          onChange={(e) => setFromTime(e.target.value)}
-        />
-        <label>To</label>{" "}
-        <input
-          type="datetime-local"
-          value={toTime}
-          onChange={(e) => setToTime(e.target.value)}
-        />
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            People
+          </label>
+          <input
+            type="number"
+            min="1"
+            value={num}
+            onChange={(e) => setNum(Number(e.target.value))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Floor (optional)
+          </label>
+          <input
+            type="number"
+            placeholder="Any floor"
+            value={floor}
+            onChange={(e) => setFloor(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+          />
+        </div>
       </div>
 
-      <ul>
-        {candidates.map((c) => (
-          <li key={c._id}>
-            {c.roomNumber} - seats {c.availableSeats} floor {c.floor}
-            <button onClick={() => book(c)}>Book</button>
-          </li>
-        ))}
-      </ul>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            From
+          </label>
+          <input
+            type="datetime-local"
+            value={fromTime}
+            onChange={(e) => setFromTime(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            To
+          </label>
+          <input
+            type="datetime-local"
+            value={toTime}
+            onChange={(e) => setToTime(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+          />
+        </div>
+      </div>
+
+      <button
+        onClick={getRecommendations}
+        disabled={loading}
+        className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-medium py-2.5 px-4 rounded-lg transition-colors flex items-center justify-center"
+      >
+        {loading ? (
+          <>
+            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
+            Finding Rooms...
+          </>
+        ) : (
+          "Get Suggestions"
+        )}
+      </button>
+
+      {candidates.length > 0 && (
+        <div className="space-y-2">
+          <h5 className="font-medium text-gray-700">Available Rooms:</h5>
+          {candidates.map((c) => (
+            <div
+              key={c._id}
+              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
+            >
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <span className="text-sm font-semibold text-blue-600">{c.roomNumber}</span>
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-gray-900">Room {c.roomNumber}</div>
+                  <div className="text-xs text-gray-500">
+                    Floor {c.floor} • {c.availableSeats} seats
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => book(c)}
+                className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-1.5 px-3 rounded-lg transition-colors"
+              >
+                Book
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
