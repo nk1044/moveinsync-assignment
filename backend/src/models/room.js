@@ -9,7 +9,7 @@ const roomSchema = new mongoose.Schema(
     isHold: {
       type: String,
       enum: [ "true", "false"],
-      default: "free", 
+      default: "false", 
     },
   },
   { timestamps: true }

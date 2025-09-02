@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useUser } from '../store/zustand.js';
-import { GetCurrentUser } from '../server/server.js';
+import { GetCurrentUser } from '../server/auth.js';
 import { useNavigate } from 'react-router-dom';
 import Loading from './Loading.jsx';
 

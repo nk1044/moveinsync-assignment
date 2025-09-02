@@ -1,8 +1,13 @@
 import React from 'react'
+import RoomsPage from './RoomsPage'
 
 function Home() {
   return (
-    <div>Home</div>
+    <div className='w-full'>
+
+      <RoomsPage/>
+      
+    </div>
   )
 }
 
