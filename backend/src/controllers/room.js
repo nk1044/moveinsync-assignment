@@ -87,85 +87,156 @@ const deleteRoom = async (req, res) => {
   }
 };
 
+function toUTC(dateString) {
+  const d = new Date(dateString);
+  return new Date(Date.UTC(
+    d.getUTCFullYear(),
+    d.getUTCMonth(),
+    d.getUTCDate(),
+    d.getUTCHours(),
+    d.getUTCMinutes(),
+    d.getUTCSeconds(),
+    d.getUTCMilliseconds()
+  ));
+}
+
 const recommendRooms = async (req, res) => {
   try {
-    const { numberOfPeople, preferredFloor } = req.body;
-    if (!numberOfPeople) return res.status(400).json({ message: "numberOfPeople required" });
+    console.log('Recommend rooms called');
+    const { numberOfPeople, preferredFloor, fromTime, toTime } = req.body;
+    console.log(numberOfPeople, preferredFloor, fromTime, toTime);
+    
+    if (!numberOfPeople || !fromTime || !toTime) {
+      return res.status(400).json({ message: "all fields are required" });
+    }
 
     const num = Number(numberOfPeople);
     const prefFloor = preferredFloor != null ? Number(preferredFloor) : null;
 
-    // basic candidate filtering
-    let candidates = await Room.find({ availableSeats: { $gte: num } }).lean();
+    const startTime = fromTime ? toUTC(fromTime) : null;
+    const endTime = toTime ? toUTC(toTime) : null;
 
-    // score and sort
-    candidates = candidates.map(r => ({
-      ...r,
-      capacityDelta: r.availableSeats - num,
-      proximityScore: prefFloor !== null ? (r.floor === prefFloor ? 1 : 0) : 0,
-      recentScore: new Date(r.updatedAt).getTime()
-    })).sort((a, b) => {
-      if (a.capacityDelta !== b.capacityDelta) return a.capacityDelta - b.capacityDelta;
-      if (a.proximityScore !== b.proximityScore) return b.proximityScore - a.proximityScore;
-      return b.recentScore - a.recentScore;
+    // 1. Get all rooms
+    let roomsQuery = { availableSeats: { $gte: num } };
+    if (prefFloor != null) {
+      roomsQuery.floor = prefFloor;
+    }
+
+    const allRooms = await Room.find(roomsQuery);
+    console.log('valid rooms:- ', allRooms.length);
+    
+    let candidates = [];
+
+    for (const room of allRooms) {
+      const overlap = await Meeting.findOne({
+        room: room._id,
+        startTime: { $lt: endTime },
+        endTime: { $gt: startTime },
+      });
+      
+      if (!overlap) {
+        candidates.push(room);
+      }else{
+        console.log(`Room ${room.roomNumber} is booked from ${overlap.startTime} to ${overlap.endTime}`);
+      }
+    }
+
+    return res.json({
+      message: "Recommendations",
+      candidates,
     });
-
-    return res.json({ message: "Recommendations", candidates: candidates.slice(0, 10) });
   } catch (e) {
-    return res.status(500).json({ message: "Error recommending rooms", error: e.message });
+    console.error("Error recommending rooms:", e);
+    return res
+      .status(500)
+      .json({ message: "Error recommending rooms", error: e.message });
   }
 };
 
 
 const assignRoom = async (req, res) => {
   try {
-    const { fromTime, toTime, numberOfPeople, organizer, preferredFloor } = req.body;
-    if (!fromTime || !toTime || !numberOfPeople || !organizer) {
-      return res.status(400).json({ message: "Missing fields" });
+    const { roomId, fromTime, toTime, organizer } = req.body;
+
+    if (!roomId || !fromTime || !toTime || !organizer) {
+      return res.status(400).json({ message: "Missing required fields" });
     }
 
-    const startTime = new Date(fromTime);
-    const endTime = new Date(toTime);
-    if (startTime >= endTime) return res.status(400).json({ message: "Invalid time range" });
+    const startTime = toUTC(new Date(fromTime));
+    const endTime = toUTC(new Date(toTime));
 
-    // get candidates sorted by recommendation logic
-    const recRes = await recommendRooms({ body: { numberOfPeople, preferredFloor } }, { json: (x)=>x });
-    const candidates = recRes.candidates;
+    if (startTime >= endTime) {
+      return res.status(400).json({ message: "Invalid meeting time range" });
+    }
+    const room = await Room.findById(roomId);
+    if (!room) {
+      return res.status(404).json({ message: "Room not found" });
+    }
 
-    let chosen = null;
+    const overlap = await Meeting.findOne({
+      room: roomId,
+      startTime: { $lt: endTime },
+      endTime: { $gt: startTime },
+    });
 
-    for (const c of candidates) {
-      const overlap = await Meeting.findOne({
-        room: c._id,
-        $or: [
-          { startTime: { $lt: endTime }, endTime: { $gt: startTime } }
-        ]
+    if (overlap) {
+      return res.status(409).json({
+        message: "Room is already booked for the given time",
+        conflict: {
+          meetingId: overlap._id,
+          startTime: overlap.startTime,
+          endTime: overlap.endTime,
+        },
       });
-      if (!overlap) { chosen = c; break; }
     }
 
-    if (!chosen) return res.status(404).json({ message: "No suitable room available for given time" });
+    const meeting = await Meeting.create({
+      room: roomId,
+      organizer,
+      startTime,
+      endTime,
+    });
 
-    const meeting = new Meeting({ room: chosen._id, organizer, startTime, endTime });
-    await meeting.save();
-
-    // update room updatedAt to indicate recent booking (no other fields changed)
-    await Room.findByIdAndUpdate(chosen._id, { $set: { updatedAt: new Date() } });
-
-    req.io?.emit("rooms:updated", { type: "BOOKED", roomId: chosen._id, meetingId: meeting._id });
-
-    return res.status(200).json({
-      message: "Room assigned",
-      roomId: chosen._id,
-      roomNumber: chosen.roomNumber,
-      floor: chosen.floor,
+    return res.status(201).json({
+      message: "Room assigned successfully",
+      roomId: room._id,
+      roomNumber: room.roomNumber,
+      floor: room.floor,
       meetingId: meeting._id,
       startTime,
-      endTime
+      endTime,
     });
-  } catch (e) {
-    return res.status(500).json({ message: "Server error", error: e.message });
+  } catch (error) {
+    console.error("Error assigning room:", error);
+    return res.status(500).json({ message: "Server error", error: error.message });
   }
+};
+
+
+
+const getAvailableRooms = async (num, prefFloor, startTime, endTime) => {
+  const roomQuery = { capacity: { $gte: num } };
+  if (prefFloor !== null) {
+    roomQuery.floor = prefFloor;
+  }
+  const rooms = await Room.find(roomQuery).sort({ updatedAt: 1 });
+  if (!startTime || !endTime) {
+    return rooms;
+  }
+  const availableRooms = [];
+  for (const room of rooms) {
+    const overlap = await Meeting.findOne({
+      room: room._id,
+      startTime: { $lt: endTime },
+      endTime: { $gt: startTime },
+    });
+
+    if (!overlap) {
+      availableRooms.push(room);
+    }
+  }
+
+  return availableRooms;
 };
 
 

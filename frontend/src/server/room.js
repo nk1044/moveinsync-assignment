@@ -48,6 +48,7 @@ export const deleteRoom = async (id) => {
 export const recommendRooms = async (payload) => {
     try {
         const response = await axios.post(`${base}/api/rooms/recommend`, payload);
+        console.log(response.data);
         return response.data.candidates;
     } catch (error) {
         console.error("Error recommending rooms:", error);

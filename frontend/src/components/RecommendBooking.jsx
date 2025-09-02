@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
-import {toast} from "react-hot-toast";
+import { toast } from "react-hot-toast";
 import { useUser } from "../store/zustand";
-import {recommendRooms, assignRoom} from '../server/room';
+import { recommendRooms, assignRoom } from '../server/room';
+import room from "../../../backend/src/models/room";
 
 
 export default function RecommendBooking({ onAssigned }) {
@@ -19,17 +20,34 @@ export default function RecommendBooking({ onAssigned }) {
       return;
     }
 
+    if (!fromTime || !toTime) {
+      toast.error("Please select both start and end times");
+      return;
+    }
+
+    if (new Date(fromTime) >= new Date(toTime)) {
+      toast.error("End time must be after start time");
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await recommendRooms({
         numberOfPeople: num,
-        preferredFloor: floor || undefined,
+        preferredFloor: floor || null,
+        fromTime,
+        toTime,
       });
+
+      console.log(res);
       setCandidates(res);
+
       if (res.length === 0) {
-        toast.info("No rooms found matching your criteria");
+        toast.error("No rooms available for the selected time");
       } else {
-        toast.success(`Found ${res.length} available room${res.length > 1 ? 's' : ''}`);
+        toast.success(
+          `Found ${res.length} available room${res.length > 1 ? "s" : ""}`
+        );
       }
     } catch (err) {
       console.error(err);
@@ -38,6 +56,7 @@ export default function RecommendBooking({ onAssigned }) {
       setLoading(false);
     }
   };
+
 
   const book = async (candidate) => {
     if (!user?._id) {
@@ -58,9 +77,8 @@ export default function RecommendBooking({ onAssigned }) {
     const payload = {
       fromTime: fromTime || new Date().toISOString(),
       toTime: toTime || new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-      numberOfPeople: num,
       organizer: user._id,
-      preferredFloor: floor || undefined,
+      roomId: candidate._id,
     };
 
     try {
